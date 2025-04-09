@@ -39,13 +39,21 @@ export class HCWebSDK {
         window.WebVideoCtrl.I_InitPlugin({
           ...options,
           cbInitPluginComplete: () => {
-            console.log('插件初始化完成')
             resolve(true)
           }
         })
       } catch (error) {
         reject(error)
       }
+    })
+  }
+
+  // 检查插件版本
+  static I_CheckPluginVersion(): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      window.WebVideoCtrl.I_CheckPluginVersion()
+        .then((res: boolean) => resolve(res))
+        .catch(reject)
     })
   }
 

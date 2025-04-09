@@ -9,6 +9,7 @@ const { RangePicker } = DatePicker
 
 const App: React.FC = () => {
   const [channels, setChannels] = useState<any[]>([])
+  const [machineId, setMachineId] = useState<string>('')
   const deviceIdentifyRef = useRef<string>('')
   const loggedInRef = useRef<boolean>(false)
   const [selectedChannel, setSelectedChannel] = useState<any>(null)
@@ -20,102 +21,103 @@ const App: React.FC = () => {
     moment().subtract(1, 'day'),
     moment()
   ])
-  const [isPluginVisible, setIsPluginVisible] = useState<boolean>(false)
+  const [isPluginVisible, setIsPluginVisible] = useState<boolean>(true)
 
-  useEffect(() => {
-    const initDevice = async () => {
-      try {
-        // 1. 初始化插件及注入到页面指定的容器
-        const initRes = await HCWebSDK.I_InitPlugin({
-          iWndowType: 1, // 4x4 分屏
-          bDebugMode: true,
-          // 插件事件回调（可根据需要处理）
-          cbSelWnd: (xml: string) => console.log('选中窗口回调：', xml)
-        })
-        console.log('插件初始化成功：', initRes)
+  // 初始化设备
+  const initDevice = async () => {
+    try {
+      // 1. 初始化插件
+      await HCWebSDK.I_InitPlugin({
+        iWndowType: 1, // 4x4 分屏
+        bDebugMode: true,
+        // 插件事件回调（可根据需要处理）
+        cbSelWnd: (xml: string) => console.log('选中窗口回调：', xml)
+      })
+      console.log('插件初始化成功')
+      // 注入插件到页面
+      await HCWebSDK.I_InsertOBJECTPlugin('pluginContainer')
+      console.log('插件注入成功')
+      // await HCWebSDK.I_CheckPluginVersion()
 
-        // 注入插件到页面
-        await HCWebSDK.I_InsertOBJECTPlugin('pluginContainer')
-        console.log('插件注入成功')
+      // 2. 登录设备
+      const ip = '192.168.7.69' // 设备 IP
+      const protocol = 1 // 1 表示 http 协议
+      const port = 80 // 登录端口
+      const username = 'admin'
+      const password = 'cckj1688'
+      const loginRes = await HCWebSDK.I_Login(ip, protocol, port, username, password)
+      console.log('设备登录成功：', loginRes)
 
-        // 2. 登录设备
-        const ip = '192.168.7.69' // 设备 IP
-        const protocol = 1 // 1 表示 http 协议
-        const port = 80 // 登录端口
-        const username = 'admin'
-        const password = 'cckj1688'
-        const loginRes = await HCWebSDK.I_Login(ip, protocol, port, username, password)
-        console.log('设备登录成功：', loginRes)
+      // 设备标识为 ip_port 格式
+      const devIdentify = `${ip}_${port}`
+      deviceIdentifyRef.current = devIdentify
+      loggedInRef.current = true
+      const deviceInfo = await HCWebSDK.I_GetDeviceInfo(devIdentify)
+      console.log('设备信息：', deviceInfo)
 
-        // 设备标识为 ip_port 格式
-        const devIdentify = `${ip}_${port}`
-        deviceIdentifyRef.current = devIdentify
-        loggedInRef.current = true
-        const deviceInfo = await HCWebSDK.I_GetDeviceInfo(devIdentify)
-        console.log('设备信息：', deviceInfo)
+      // 3. 获取数字通道信息
+      const digitalChannelInfo = await HCWebSDK.I_GetDigitalChannelInfo(devIdentify)
+      console.log('数字通道信息：', digitalChannelInfo)
 
-        // 3. 获取数字通道信息
-        const digitalChannelInfo = await HCWebSDK.I_GetDigitalChannelInfo(devIdentify)
-        console.log('数字通道信息：', digitalChannelInfo)
-
-        // 根据返回的 XML 转为 JSON 后，提取通道列表
-        let channelList: any[] = []
-        const list = digitalChannelInfo?.InputProxyChannelStatusList?.InputProxyChannelStatus
-        if (Array.isArray(list)) {
-          channelList = list
-        } else if (list) {
-          channelList = [list]
-        }
-        setChannels(channelList)
-
-        // 4. 针对每个通道启动预览
-        // for (const [index, channel] of channelList.entries()) {
-        //   try {
-        //     const res = await HCWebSDK.I_StartRealPlay(devIdentify, {
-        //       iWndIndex: index, // 使用对应的窗口索引
-        //       iChannelID: Number(channel.id) || 1, // 取通道 id（若无则默认 1）
-        //       iStreamType: 1, // 主码流
-        //     });
-        //     console.log(`通道 ${channel.id} 预览启动成功：`, res);
-        //   } catch (err) {
-        //     console.error(`通道 ${channel.id} 预览启动失败：`, err);
-        //   }
-        // }
-      } catch (err: any) {
-        console.error('初始化流程出错：', err)
-        if (err.errorCode === 1002) {
-          message.error('请先安装摄像头插件')
-          try {
-            const result = await window.api.executeExe()
-            console.log('执行结果:', result)
-            initDevice()
-          } catch (error) {
-            console.error('执行出错:', error)
-          }
+      // 根据返回的 XML 转为 JSON 后，提取通道列表
+      let channelList: any[] = []
+      const list = digitalChannelInfo?.InputProxyChannelStatusList?.InputProxyChannelStatus
+      if (Array.isArray(list)) {
+        channelList = list
+      } else if (list) {
+        channelList = [list]
+      }
+      setChannels(channelList)
+    } catch (err: any) {
+      console.error('初始化流程出错：', err)
+      if (err.errorCode === 3000) {
+        message.error('请先安装摄像头插件')
+        try {
+          const result = await window.api.executeExe()
+          console.log('执行结果:', result)
+          window.api.restartApp()
+        } catch (error) {
+          console.log('安装错误', error)
+          window.api.quitApp()
         }
       }
     }
+  }
+  // 清理操作
+  const cleanup = async () => {
+    if (loggedInRef.current && deviceIdentifyRef.current) {
+      try {
+        await HCWebSDK.I_StopAllPlay()
+        console.log('已停止所有预览')
+        await HCWebSDK.I_Logout(deviceIdentifyRef.current)
+        console.log('已登出设备')
+        window.setTimeout(async () => {
+          await HCWebSDK.I_DestroyPlugin()
+          console.log('插件已销毁')
+        }, 300)
+      } catch (err) {
+        console.error('清理操作出错：', err)
+      }
+    }
+  }
+
+  useEffect(() => {
+    // 获取主机唯一标识
+    const getMachineId = async () => {
+      try {
+        const id = await window.api.getMachineId()
+        console.log('主机标识：', id)
+        setMachineId(id)
+      } catch (err) {
+        console.error('获取主机标识失败：', err)
+      }
+    }
+    getMachineId()
 
     initDevice()
 
-    // 5. 组件卸载时停止预览、登出设备、销毁插件
+    // 组件卸载时停止预览、登出设备、销毁插件
     return () => {
-      const cleanup = async () => {
-        if (loggedInRef.current && deviceIdentifyRef.current) {
-          try {
-            await HCWebSDK.I_StopAllPlay()
-            console.log('已停止所有预览')
-            await HCWebSDK.I_Logout(deviceIdentifyRef.current)
-            console.log('已登出设备')
-            window.setTimeout(async () => {
-              await HCWebSDK.I_DestroyPlugin()
-              console.log('插件已销毁')
-            }, 300)
-          } catch (err) {
-            console.error('清理操作出错：', err)
-          }
-        }
-      }
       cleanup()
     }
   }, [])
@@ -145,11 +147,6 @@ const App: React.FC = () => {
   }
 
   const handleCapture = async () => {
-    // if (!selectedChannel) {
-    //   message.warning('请先选择一个通道');
-    //   return;
-    // }
-
     try {
       // 调用抓图接口获取二进制数据
       const imageData = await HCWebSDK.I_CapturePicData({
@@ -247,20 +244,6 @@ const App: React.FC = () => {
     }
   }
 
-  // const handleTogglePlugin = async () => {
-  //   try {
-  //     if (isPluginVisible) {
-  //       await HCWebSDK.I_HidPlugin()
-  //     } else {
-  //       await HCWebSDK.I_ShowPlugin()
-  //     }
-  //     setIsPluginVisible(!isPluginVisible)
-  //   } catch (err) {
-  //     console.error('切换插件显示状态失败：', err)
-  //     message.error('切换插件显示状态失败')
-  //   }
-  // }
-
   const columns = [
     {
       title: '开始时间',
@@ -291,6 +274,12 @@ const App: React.FC = () => {
   return (
     <div className="p-4">
       <h1 className="text-2xl font-bold mb-4">设备预览</h1>
+      {machineId && (
+        <div className="mb-4 p-2 rounded">
+          <span className="font-semibold">主机唯一标识：</span>
+          <span className="font-mono">{machineId}</span>
+        </div>
+      )}
       <main className="flex gap-4">
         <section className="w-1/2">
           {/* 通道选择下拉框 */}
@@ -309,7 +298,6 @@ const App: React.FC = () => {
             <Space>
               <RangePicker
                 showTime
-                // value={timeRange}
                 onChange={(dates) => dates && setTimeRange(dates as [moment.Moment, moment.Moment])}
               />
               <Button type="primary" onClick={handleSearchRecord}>
@@ -347,22 +335,21 @@ const App: React.FC = () => {
             </div>
           )}
         </section>
-        {isPluginVisible && (
-          <div className="w-1/2">
-            {/* 插件容器，插件将被注入此处 */}
-            <div id="pluginContainer" className="w-[398px] h-[224px]"></div>
 
-            {/* 通道信息显示区域 */}
-            {channelInfo && (
-              <div className="p-4 rounded-lg mt-4 bg-gray-50">
-                <h3 className="text-lg font-semibold mb-2">通道详细信息：</h3>
-                <pre className="whitespace-pre-wrap text-sm">
-                  {JSON.stringify(channelInfo, null, 2)}
-                </pre>
-              </div>
-            )}
-          </div>
-        )}
+        <div className="w-1/2">
+          {/* 插件容器，插件将被注入此处 */}
+          <div id="pluginContainer" className="w-[398px] h-[224px]"></div>
+
+          {/* 通道信息显示区域 */}
+          {isPluginVisible && channelInfo && (
+            <div className="p-4 rounded-lg mt-4">
+              <h3 className="text-lg font-semibold mb-2">通道详细信息：</h3>
+              <pre className="whitespace-pre-wrap text-sm">
+                {JSON.stringify(channelInfo, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
       </main>
     </div>
   )

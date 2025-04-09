@@ -1,13 +1,20 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import { join } from 'path'
+import HCWebSDKPlugin from '../../resources/HCWebSDKPlugin.exe?asset&asarUnpack'
 
 // Custom APIs for renderer
 const api = {
   executeExe: (): Promise<string> => {
-    // 使用 __dirname 获取当前文件所在目录，然后向上两级到项目根目录
-    const exePath = join(__dirname, '..', '..', 'resources', 'HCWebSDKPlugin.exe')
-    return ipcRenderer.invoke('execute-exe', exePath)
+    return ipcRenderer.invoke('execute-exe', HCWebSDKPlugin)
+  },
+  restartApp: (): Promise<void> => {
+    return ipcRenderer.invoke('restart-app')
+  },
+  quitApp: (): Promise<void> => {
+    return ipcRenderer.invoke('quit-app')
+  },
+  getMachineId: (): Promise<string> => {
+    return ipcRenderer.invoke('get-machine-id')
   }
 }
 

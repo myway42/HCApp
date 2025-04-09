@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { spawn } from 'child_process'
+import { machineIdSync } from 'node-machine-id'
 
 function createWindow(): void {
   // Create the browser window.
@@ -20,6 +21,8 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+    // 打开开发者工具
+    mainWindow.webContents.openDevTools()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -81,6 +84,22 @@ app.whenReady().then(() => {
         reject(err)
       })
     })
+  })
+
+  // Handle app restart
+  ipcMain.handle('restart-app', () => {
+    app.relaunch()
+    app.quit()
+  })
+
+  // Handle app quit
+  ipcMain.handle('quit-app', () => {
+    app.quit()
+  })
+
+  // 获取主机唯一标识
+  ipcMain.handle('get-machine-id', () => {
+    return machineIdSync()
   })
 
   createWindow()
