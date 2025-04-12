@@ -1,15 +1,17 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { spawn } from 'child_process'
-import { machineIdSync } from 'node-machine-id'
+import { registerIpcHandlers } from './ipcHandlers'
+import { startHttpServer, stopHttpServer } from './api'
 
 function createWindow(): void {
-  // Create the browser window.
+  // 新建主窗口
   const mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
+    minWidth: 900,
+    minHeight: 670,
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
@@ -18,20 +20,18 @@ function createWindow(): void {
       sandbox: false
     }
   })
-
+  // 窗口加载完成事件
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
     // 打开开发者工具
     mainWindow.webContents.openDevTools()
   })
-
+  // 窗口打开外部链接事件
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
   })
-
-  // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development or the local html file for production.
+  // 开发环境加载开发服务地址，生产环境加载 html 文件
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
@@ -39,11 +39,9 @@ function createWindow(): void {
   }
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
+// 应用初始化完成事件
 app.whenReady().then(() => {
-  // Set app user model id for windows
+  // 设置应用ID
   electronApp.setAppUserModelId('com.electron')
 
   // Default open or close DevTools by F12 in development
@@ -53,54 +51,11 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
+  // 注册所有IPC处理程序
+  registerIpcHandlers()
 
-  // Handle exe execution
-  ipcMain.handle('execute-exe', async (_, exePath: string) => {
-    return new Promise((resolve, reject) => {
-      const process = spawn(exePath)
-
-      let output = ''
-      let errorOutput = ''
-
-      process.stdout.on('data', (data) => {
-        output += data.toString()
-      })
-
-      process.stderr.on('data', (data) => {
-        errorOutput += data.toString()
-      })
-
-      process.on('close', (code) => {
-        if (code === 0) {
-          resolve(output)
-        } else {
-          reject(new Error(`Process exited with code ${code}\nError: ${errorOutput}`))
-        }
-      })
-
-      process.on('error', (err) => {
-        reject(err)
-      })
-    })
-  })
-
-  // Handle app restart
-  ipcMain.handle('restart-app', () => {
-    app.relaunch()
-    app.quit()
-  })
-
-  // Handle app quit
-  ipcMain.handle('quit-app', () => {
-    app.quit()
-  })
-
-  // 获取主机唯一标识
-  ipcMain.handle('get-machine-id', () => {
-    return machineIdSync()
-  })
+  // 启动HTTP服务器
+  startHttpServer()
 
   createWindow()
 
@@ -118,6 +73,11 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+// 应用退出前停止HTTP服务器
+app.on('before-quit', () => {
+  stopHttpServer()
 })
 
 // In this file you can include the rest of your app's specific main process

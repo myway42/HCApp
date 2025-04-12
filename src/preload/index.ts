@@ -2,10 +2,15 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import HCWebSDKPlugin from '../../resources/HCWebSDKPlugin.exe?asset&asarUnpack'
 
-// Custom APIs for renderer
+// 给渲染进程调用的 API
 const api = {
   executeExe: (): Promise<string> => {
-    return ipcRenderer.invoke('execute-exe', HCWebSDKPlugin)
+    // 只在 Windows 系统上执行
+    if (process.platform === 'win32') {
+      return ipcRenderer.invoke('execute-exe', HCWebSDKPlugin)
+    } else {
+      return Promise.reject(new Error('该功能仅支持 Windows 系统'))
+    }
   },
   restartApp: (): Promise<void> => {
     return ipcRenderer.invoke('restart-app')

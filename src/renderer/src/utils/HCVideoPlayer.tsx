@@ -133,7 +133,10 @@ export class HCWebSDK {
     return new Promise((resolve, reject) => {
       window.WebVideoCtrl.I_GetDigitalChannelInfo(szDeviceIdentify, {
         ...options,
-        success: (xml: string) => resolve(parseXML(xml)),
+        success: (xml: string) => {
+          const list = parseXML(xml)?.InputProxyChannelStatusList?.InputProxyChannelStatus ?? []
+          resolve(Array.isArray(list) ? list : [list])
+        },
         error: (err: any) => reject(err)
       })
     })
