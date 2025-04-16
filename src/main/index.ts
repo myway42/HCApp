@@ -1,7 +1,6 @@
 import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import icon from '../../resources/icon.png?asset'
 import { registerIpcHandlers } from './ipcHandlers'
 import { startHttpServer, stopHttpServer } from './api'
 
@@ -9,12 +8,11 @@ function createWindow(): void {
   // 新建主窗口
   const mainWindow = new BrowserWindow({
     width: 900,
-    height: 670,
-    minWidth: 900,
-    minHeight: 670,
+    height: 800,
+    // minWidth: 900,
+    // minHeight: 670,
     show: false,
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -24,7 +22,7 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
     // 打开开发者工具
-    mainWindow.webContents.openDevTools()
+    // mainWindow.webContents.openDevTools()
   })
   // 窗口打开外部链接事件
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -37,6 +35,8 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+  // 启动HTTP服务器
+  startHttpServer(mainWindow)
 }
 
 // 应用初始化完成事件
@@ -53,9 +53,6 @@ app.whenReady().then(() => {
 
   // 注册所有IPC处理程序
   registerIpcHandlers()
-
-  // 启动HTTP服务器
-  startHttpServer()
 
   createWindow()
 

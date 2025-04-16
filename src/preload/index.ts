@@ -20,6 +20,20 @@ const api = {
   },
   getMachineId: (): Promise<string> => {
     return ipcRenderer.invoke('get-machine-id')
+  },
+  // 注册请求监听器
+  onRequest: (callback: (type: string) => void): void => {
+    ipcRenderer.on('request', (_, type: string) => callback(type))
+  },
+  // 发送结果到主进程
+  sendResponse: (result: { error?: string; data?: string }): void => {
+    ipcRenderer.send('response', result)
+  },
+  deleteFile: (filePath: string): Promise<boolean> => {
+    return ipcRenderer.invoke('delete-file', filePath)
+  },
+  deleteFolder: (folderPath: string): Promise<boolean> => {
+    return ipcRenderer.invoke('delete-folder', folderPath)
   }
 }
 

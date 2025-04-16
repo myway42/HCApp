@@ -3,6 +3,7 @@ import { Button, Space, Divider, Row, Col, message } from 'antd'
 import { EditOutlined, SettingOutlined } from '@ant-design/icons'
 import { PageType } from '@renderer/App'
 import CameraView from '../CameraView'
+import { getWarehouseNewAuth } from '@renderer/services/warehouse'
 
 type Props = {
   setCurrentPage: Dispatch<SetStateAction<PageType>>
@@ -16,6 +17,7 @@ const password = 'cckj1688'
 const Component: React.FC<Props> = ({ setCurrentPage }) => {
   const [machineId, setMachineId] = useState<string>('')
   const [info, setInfo] = useState<Record<string, string>>({
+    warehouseCode: '',
     stationCode: '',
     stationName: '',
     stationType: '',
@@ -36,6 +38,12 @@ const Component: React.FC<Props> = ({ setCurrentPage }) => {
     getMachineId()
   }, [])
 
+  const handleSelectWarehouse = (): void => {
+    getWarehouseNewAuth({ useStorageType: 1 }).then((res) => {
+      console.log(res)
+    })
+  }
+
   return (
     <>
       <Row gutter={[24, 24]}>
@@ -45,8 +53,20 @@ const Component: React.FC<Props> = ({ setCurrentPage }) => {
               当前电脑编码：<span className="break-all">{machineId || '--'}</span>
             </p>
             <p>
+              当前仓库：<span>{info.stationCode || '--'}</span>
+              <Button
+                onClick={handleSelectWarehouse}
+                type="primary"
+                size="small"
+                icon={<EditOutlined />}
+                className="ml-4"
+              >
+                {info.warehouseCode ? '解绑仓库' : '绑定仓库'}
+              </Button>
+            </p>
+            <p>
               工位码：<span>{info.stationCode || '--'}</span>
-              <Button type="primary" size="small" icon={<EditOutlined />} className="ml-2">
+              <Button type="primary" size="small" icon={<EditOutlined />} className="ml-4">
                 {info.stationCode ? '解绑工位' : '绑定工位'}
               </Button>
             </p>
@@ -58,7 +78,7 @@ const Component: React.FC<Props> = ({ setCurrentPage }) => {
             </p>
             <p>
               摄像头通道号：<span>{info.cameraChannel || '--'}</span>
-              <Button type="primary" size="small" icon={<EditOutlined />} className="ml-2">
+              <Button type="primary" size="small" icon={<EditOutlined />} className="ml-4">
                 {info.cameraChannel ? '解绑摄像头' : '绑定摄像头'}
               </Button>
             </p>

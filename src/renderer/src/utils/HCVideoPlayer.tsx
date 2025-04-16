@@ -1,34 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { XMLParser } from 'fast-xml-parser'
+import { parseXML } from './index'
 
 export interface Options {
   [key: string]: any
-}
-const parser = new XMLParser({
-  ignoreAttributes: false,
-  trimValues: true
-})
-// 使用 fast-xml-parser 解析 XML 字符串
-function parseXML(xmlInput: string | Node): any {
-  let xmlString = xmlInput
-  if (xmlInput instanceof Document) {
-    // 将 DOM 对象转换为字符串
-    const serializer = new XMLSerializer()
-    xmlString = serializer.serializeToString(xmlInput)
-  }
-  console.log('原始XML字符串：', xmlString)
-  if (!xmlString) {
-    console.error('XML字符串为空')
-    return null
-  }
-  try {
-    const result = parser.parse(xmlString as string)
-    console.log('解析值：', result)
-    return result
-  } catch (error) {
-    console.error('XML解析失败，详细错误：', error)
-    return null
-  }
 }
 
 export class HCWebSDK {
@@ -206,7 +180,7 @@ export class HCWebSDK {
     return new Promise((resolve, reject) => {
       window.WebVideoCtrl.I_StartRealPlay(szDeviceIdentify, {
         ...options,
-        success: (xml: string) => resolve(parseXML(xml)),
+        success: (res: string) => resolve(res),
         error: (err: any) => reject(err)
       })
     })
@@ -300,9 +274,11 @@ export class HCWebSDK {
   // 获取OSD时间
   static I_GetOSDTime(options: Options = {}): Promise<any> {
     return new Promise((resolve, reject) => {
-      window.WebVideoCtrl.I_GetOSDTime(options)
-        .then((xml: string) => resolve(parseXML(xml)))
-        .catch(reject)
+      window.WebVideoCtrl.I_GetOSDTime({
+        ...options,
+        success: (res: string) => resolve(res),
+        error: (err: any) => reject(err)
+      })
     })
   }
 
@@ -384,7 +360,7 @@ export class HCWebSDK {
     szPlaybackURI: string,
     szFileName: string,
     options: Options = {}
-  ): Promise<any> {
+  ): Promise<number> {
     return new Promise((resolve, reject) => {
       window.WebVideoCtrl.I_StartDownloadRecord(
         szDeviceIdentify,
@@ -392,7 +368,7 @@ export class HCWebSDK {
         szFileName,
         options
       )
-        .then((res: any) => resolve(res))
+        .then((res: number) => resolve(res))
         .catch(reject)
     })
   }
@@ -421,14 +397,22 @@ export class HCWebSDK {
   }
 
   // 录像下载：停止下载录像
-  static I_StopDownloadRecord(options: Options = {}): Promise<any> {
+  static I_StopDownloadRecord(iDownloadID: number): Promise<any> {
     return new Promise((resolve, reject) => {
-      window.WebVideoCtrl.I_StopDownloadRecord(options)
+      window.WebVideoCtrl.I_StopDownloadRecord(iDownloadID)
         .then((res: any) => resolve(res))
         .catch(reject)
     })
   }
 
+  // 获取下载进度
+  static I_GetDownloadProgress(iDownloadID: number): Promise<number> {
+    return new Promise((resolve, reject) => {
+      window.WebVideoCtrl.I_GetDownloadProgress(iDownloadID)
+        .then((res: number) => resolve(res))
+        .catch(reject)
+    })
+  }
   // 开始语音对讲
   static I_StartVoiceIntercom(options: Options = {}): Promise<any> {
     return new Promise((resolve, reject) => {
@@ -492,6 +476,37 @@ export class HCWebSDK {
     })
   }
 
+  // 获取插件配置信息
+  static I_GetLocalCfg(): Promise<any> {
+    return new Promise((resolve, reject) => {
+      window.WebVideoCtrl.I_GetLocalCfg()
+        .then((res: any) => resolve(res))
+        .catch(reject)
+    })
+  }
+
+  // 设置插件配置信息
+  static I_SetLocalCfg(options: Options = {}): Promise<any> {
+    return new Promise((resolve, reject) => {
+      window.WebVideoCtrl.I_SetLocalCfg(options)
+        .then((res: any) => resolve(res))
+        .catch(reject)
+    })
+  }
+
+  // 获取错误信息
+  static I_GetLastError(): Promise<any> {
+    return new Promise((resolve, reject) => {
+      window.WebVideoCtrl.I_GetLastError()
+        .then((res: number) => resolve(res))
+        .catch(reject)
+    })
+  }
+
+  // 获取窗口状态
+  static I_GetWindowStatus(iWndIndex: number): any {
+    return window.WebVideoCtrl.I_GetWindowStatus(iWndIndex)
+  }
   // 其它接口按需添加…
 }
 

@@ -1,8 +1,9 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState, useRef } from 'react'
-import HCWebSDK from '../../utils/HCVideoPlayer'
-import { Button, message } from 'antd'
+import HCWebSDK from '@renderer/utils/HCVideoPlayer'
+import { message } from 'antd'
+import VideoDownloadService from '@renderer/services/VideoDownloadService'
+import { parseXML } from '@renderer/utils'
 
 type Props = {
   ip: string
@@ -22,18 +23,20 @@ const Component: React.FC<Props> = ({ ip, port, username, password }) => {
   const [isPluginVisible, setIsPluginVisible] = useState<boolean>(true)
 
   // 初始化设备
-  const initDevice = async () => {
+  const initDevice = async (): Promise<void> => {
+    if (loggedInRef.current) {
+      return
+    }
     try {
       // 1. 初始化插件
       await HCWebSDK.I_InitPlugin({
-        iWndowType: 1, // 分屏
+        iWndowType: 4, // 分屏
         bDebugMode: true,
-        cbSelWnd: (xml: string) => console.log('选中窗口回调：', xml)
+        cbSelWnd: (xml: string) =>
+          console.log('选中窗口回调：', parseXML(xml).RealPlayInfo.SelectWnd)
       })
-      console.log('插件初始化成功')
       // 注入插件到页面
       await HCWebSDK.I_InsertOBJECTPlugin('pluginContainer')
-      console.log('插件注入成功')
 
       // 2. 登录设备
       const loginRes = await HCWebSDK.I_Login(ip, 1, port, username, password)
@@ -44,8 +47,31 @@ const Component: React.FC<Props> = ({ ip, port, username, password }) => {
       const channelList = await HCWebSDK.I_GetDigitalChannelInfo(szDeviceIdentify)
       console.log('数字通道信息：', channelList)
       setChannels(channelList)
+      // 判断在线状态
+      if (!channelList?.find((c) => c.id === 3)?.sourceInputPortDescriptor?.online) {
+        message.error('通道3未在线')
+        return
+      }
+      VideoDownloadService.startScheduledTask()
+
+      // 4. 启动预览
+      window.setTimeout(async () => {
+        await HCWebSDK.I_StartRealPlay(szDeviceIdentify, {
+          iChannelID: 3
+          // szStartTime: '20250413T143501Z',
+          // szEndTime: '20250413T143851Z'
+          // szUrl:
+          //   'rtsp://192.168.7.69/Streaming/tracks/501/?starttime=20250413T143501Z&endtime=20250413T143851Z&name=00000001456000100&size=19670920'
+        })
+        setIsPluginVisible(true)
+      }, 1000)
     } catch (err: any) {
       console.error('初始化流程出错：', err)
+      const lastError = await HCWebSDK.I_GetLastError()
+      console.log('错误代码：', lastError)
+      if (err.errorCode === 2001) {
+        message.warning('设备已登录')
+      }
       if (err.errorCode === 3000) {
         message.error('请先安装摄像头插件')
         try {
@@ -68,7 +94,7 @@ const Component: React.FC<Props> = ({ ip, port, username, password }) => {
     }
   }
   // 组件卸载时停止预览、登出设备、销毁插件
-  const cleanup = async () => {
+  const cleanup = async (): Promise<void> => {
     if (loggedInRef.current) {
       try {
         await HCWebSDK.I_StopAllPlay()
@@ -77,6 +103,7 @@ const Component: React.FC<Props> = ({ ip, port, username, password }) => {
         console.log('已登出设备')
         window.setTimeout(async () => {
           await HCWebSDK.I_DestroyPlugin()
+          loggedInRef.current = false
           console.log('插件已销毁')
         }, 300)
       } catch (err) {
@@ -87,13 +114,29 @@ const Component: React.FC<Props> = ({ ip, port, username, password }) => {
 
   useEffect(() => {
     initDevice()
+    // 注册接口监听
+    window.api.onRequest(async (type: string) => {
+      let result = {}
+      if (type === 'capture') {
+        result = await handleCapture()
+      }
+      if (type === 'getTime') {
+        result = await handleGetTime()
+      }
+      window.api.sendResponse(result)
+    })
+    // 定时下载上传视频任务
+    const interval = setInterval(() => {
+      VideoDownloadService.startScheduledTask()
+    }, 10000)
 
-    return () => {
+    return (): void => {
       cleanup()
+      clearInterval(interval)
     }
   }, [])
 
-  const handleChannelSelect = async (channelId: string) => {
+  const handleChannelSelect = async (channelId: string): Promise<void> => {
     const channel = channels.find((c) => c.id === channelId)
     if (channel && szDeviceIdentify) {
       setSelectedChannel(channel)
@@ -117,29 +160,45 @@ const Component: React.FC<Props> = ({ ip, port, username, password }) => {
     }
   }
 
-  const handleCapture = async () => {
+  const handleCapture = async (): Promise<{ data?: string; error?: string }> => {
     try {
       // 调用抓图接口获取二进制数据
       const imageData = await HCWebSDK.I_CapturePicData({
         iWndIndex: 0
       })
-
       if (!imageData) {
-        throw new Error('获取图片数据失败')
+        return { error: '获取图片数据失败' }
       }
 
       // 将二进制数据转换为Base64字符串
       const base64Image = `data:image/jpeg;base64,${imageData}`
       setCapturedImage(base64Image)
-
-      message.success('抓图成功')
+      return { data: base64Image }
     } catch (err: any) {
       console.error('抓图失败，详细错误：', err)
-      message.error(`抓图失败：${err.message || '未知错误'}`)
+      return {
+        error: `errorCode: ${err.errorCode || '未知'}, errorMsg: ${err.errorMsg || err || '未知'}`
+      }
     }
   }
 
-  return <div id="pluginContainer" className="w-[398px] h-[224px]"></div>
+  const handleGetTime = async (): Promise<{ data?: string; error?: string }> => {
+    try {
+      const value = await HCWebSDK.I_GetOSDTime({ iWndIndex: 0 })
+      return { data: value }
+    } catch (err: any) {
+      console.error('获取OSD时间失败，详细错误：', err)
+      return {
+        error: `errorCode: ${err.errorCode || '未知'}, errorMsg: ${err.errorMsg || err || '未知'}`
+      }
+    }
+  }
+
+  return (
+    <>
+      <div id="pluginContainer" className="w-[398px] h-[224px]" />
+    </>
+  )
 }
 
 export default Component
